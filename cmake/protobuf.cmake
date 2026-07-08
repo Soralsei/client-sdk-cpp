@@ -164,6 +164,23 @@ livekit_fetchcontent_makeavailable(livekit_abseil)
 livekit_collect_targets_in_directory(_livekit_abseil_targets "${livekit_abseil_BINARY_DIR}")
 foreach(_livekit_abseil_target IN LISTS _livekit_abseil_targets)
   livekit_disable_warnings(${_livekit_abseil_target})
+  if(NOT MSVC)
+    # Vendored abseil ${LIVEKIT_ABSEIL_VERSION} omits <cstdint>/<cstddef> in a
+    # few headers (e.g. absl/container/internal/container_memory.h) and relied
+    # on libstdc++ pulling them in transitively. GCC 13+ trimmed those
+    # transitive includes, so uintptr_t/size_t no longer resolve. Force the
+    # headers in rather than patching the vendored source.
+    _livekit_resolve_target(${_livekit_abseil_target} _resolved_abseil_target)
+    if(_resolved_abseil_target)
+      get_target_property(_abseil_target_type ${_resolved_abseil_target} TYPE)
+      if(_abseil_target_type MATCHES "^(STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY|EXECUTABLE)$")
+        target_compile_options(${_resolved_abseil_target} PRIVATE
+          "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include cstdint>"
+          "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include cstddef>"
+        )
+      endif()
+    endif()
+  endif()
 endforeach()
 
 # Workaround for some abseil flags on Apple Silicon.
@@ -195,6 +212,20 @@ livekit_fetchcontent_makeavailable(livekit_protobuf)
 livekit_collect_targets_in_directory(_livekit_protobuf_targets "${livekit_protobuf_BINARY_DIR}")
 foreach(_livekit_protobuf_target IN LISTS _livekit_protobuf_targets)
   livekit_disable_warnings(${_livekit_protobuf_target})
+  if(NOT MSVC)
+    # See the matching abseil loop above: protobuf's sources include absl
+    # headers directly and hit the same missing-transitive-include issue.
+    _livekit_resolve_target(${_livekit_protobuf_target} _resolved_protobuf_target)
+    if(_resolved_protobuf_target)
+      get_target_property(_protobuf_target_type ${_resolved_protobuf_target} TYPE)
+      if(_protobuf_target_type MATCHES "^(STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY|EXECUTABLE)$")
+        target_compile_options(${_resolved_protobuf_target} PRIVATE
+          "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include cstdint>"
+          "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include cstddef>"
+        )
+      endif()
+    endif()
+  endif()
 endforeach()
 
 # Protobuf targets: modern protobuf exports protobuf::protoc etc.
